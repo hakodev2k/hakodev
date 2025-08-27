@@ -7,11 +7,6 @@ pipeline {
         PATH = "${PATH}:${HOME}/.dotnet/tools:${HOME}/.local/bin"
     }
     
-    tools {
-        // Add dotnet tool definition if you're using the Jenkins tool installer
-        // dotnet 'dotnetcore-3.1'
-    }
-    
     stages {
         stage('Setup Tools') {
             steps {
