@@ -139,13 +139,12 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
                     sh '''
-                        curl -X POST "http://octopus-deploy:8080/api/deployments" \
-                        -H "X-Octopus-ApiKey: ${OCTOPUS_API_KEY}" \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "ReleaseId": "'${ENVIRONMENT}.${BUILD_NUMBER}'",
-                            "EnvironmentId": "Environments-1"
-                        }'
+                        octo push \
+                            --server http://4.194.43.57:8080 \
+                            --apiKey ${OCTOPUS_API_KEY} \
+                            --package ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip \
+                            --packageId hakodev \
+                            --version ${BUILD_NUMBER}
                     '''
                 }
             }
