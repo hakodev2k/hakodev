@@ -20,6 +20,11 @@ pipeline {
                         else
                             echo "Octopus CLI already installed"
                         fi
+                        
+                        # Verify Octopus CLI is properly installed and accessible
+                        echo "Verifying Octopus CLI installation..."
+                        which dotnet-octo || echo "dotnet-octo not found in PATH"
+                        dotnet octo --version || echo "Failed to get Octopus CLI version"
                     '''
                 }
             }
@@ -115,33 +120,56 @@ pipeline {
         
         stage('Package') {
             steps {
-                sh 'dotnet publish ./hakodev/hakodev.csproj --configuration Release --output ./publish'
-                sh 'mkdir -p ./artifacts'
-                sh 'cd ./publish && zip -r ../artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip .'
+                sh '''
+                    dotnet publish ./hakodev/hakodev.csproj --configuration Release --output ./publish
+                    mkdir -p ./artifacts
+                    cd ./publish && zip -r ../artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip .
+                    
+                    # Verify package was created properly
+                    echo "Verifying package creation..."
+                    ls -la ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip || echo "Package file not found"
+                '''
             }
         }
         
         stage('Push to Octopus') {
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
-                    // Use dotnet-octo CLI to push package
-                    sh """
+                    sh '''
+                        # Debug information before push
+                        echo "Debug: Environment variable values"
+                        echo "PATH: $PATH"
+                        echo "ENVIRONMENT: $ENVIRONMENT"
+                        echo "BUILD_NUMBER: $BUILD_NUMBER"
+                        echo "Package to push: ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip"
+                        ls -la ./artifacts/
+                        
+                        # Check Octopus server connectivity
+                        echo "Testing connection to Octopus server..."
+                        curl -s -o /dev/null -w "%{http_code}" http://4.194.43.57:8080 || echo "Failed to connect to Octopus server"
+                        
+                        # Use dotnet-octo CLI with verbose logging
+                        echo "Pushing package to Octopus Deploy..."
+                        set -x  # Enable command echo
                         dotnet octo push \
                             --server http://4.194.43.57:8080 \
-                            --apiKey \${OCTOPUS_API_KEY} \
-                            --package ./artifacts/hakodev.\${ENVIRONMENT}.\${BUILD_NUMBER}.zip \
-                            --replace-existing
-                    """
-                    
-                    // Create release with proper package referencing
-                    sh """
+                            --apiKey ${OCTOPUS_API_KEY} \
+                            --package ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip \
+                            --replace-existing \
+                            --verbose
+                        set +x  # Disable command echo
+                        
+                        echo "Creating release in Octopus Deploy..."
+                        set -x  # Enable command echo
                         dotnet octo create-release \
                             --server http://4.194.43.57:8080 \
-                            --apiKey \${OCTOPUS_API_KEY} \
+                            --apiKey ${OCTOPUS_API_KEY} \
                             --project hakodev \
-                            --version \${ENVIRONMENT}.\${BUILD_NUMBER} \
-                            --packageversion \${ENVIRONMENT}.\${BUILD_NUMBER}
-                    """
+                            --version ${ENVIRONMENT}.${BUILD_NUMBER} \
+                            --packageversion ${ENVIRONMENT}.${BUILD_NUMBER} \
+                            --verbose
+                        set +x  # Disable command echo
+                    '''
                 }
             }
         }
