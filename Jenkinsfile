@@ -4,6 +4,7 @@ pipeline {
     environment {
         DOTNET_CLI_HOME = "/tmp/DOTNET_CLI_HOME"
         DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+        PATH = "${PATH}:${HOME}/.dotnet/tools"
     }
     
     stages {
