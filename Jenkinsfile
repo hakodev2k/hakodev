@@ -11,20 +11,27 @@ pipeline {
         stage('Setup Tools') {
             steps {
                 script {
-                    // Install Octopus CLI using .NET global tool
+                    // Install and properly configure Octopus CLI
                     sh '''
-                        if ! command -v dotnet-octo &> /dev/null; then
-                            echo "Installing Octopus CLI as .NET global tool..."
-                            dotnet tool install --global Octopus.DotNet.Cli --version 9.1.7
-                            echo "Octopus CLI installed"
-                        else
-                            echo "Octopus CLI already installed"
-                        fi
+                        # Ensure .NET tools directory exists
+                        mkdir -p $HOME/.dotnet/tools
+
+                        # Uninstall any existing installation to ensure clean state
+                        dotnet tool uninstall --global Octopus.DotNet.Cli || true
+
+                        # Install Octopus CLI as .NET global tool
+                        echo "Installing Octopus CLI as .NET global tool..."
+                        dotnet tool install --global Octopus.DotNet.Cli --version 9.1.7
+
+                        # Export the PATH to include .NET tools
+                        export PATH="$PATH:$HOME/.dotnet/tools"
                         
                         # Verify Octopus CLI is properly installed and accessible
                         echo "Verifying Octopus CLI installation..."
-                        which dotnet-octo || echo "dotnet-octo not found in PATH"
-                        dotnet octo --version || echo "Failed to get Octopus CLI version"
+                        ls -la $HOME/.dotnet/tools/dotnet-octo || echo "dotnet-octo executable not found"
+                        
+                        # Use the full path for verification
+                        $HOME/.dotnet/tools/dotnet-octo --version || echo "Failed to get Octopus CLI version"
                     '''
                 }
             }
@@ -127,7 +134,7 @@ pipeline {
                     
                     # Verify package was created properly
                     echo "Verifying package creation..."
-                    ls -la ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip || echo "Package file not found"
+                    ls -la ../artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip || echo "Package file not found"
                 '''
             }
         }
@@ -138,7 +145,6 @@ pipeline {
                     sh '''
                         # Debug information before push
                         echo "Debug: Environment variable values"
-                        echo "PATH: $PATH"
                         echo "ENVIRONMENT: $ENVIRONMENT"
                         echo "BUILD_NUMBER: $BUILD_NUMBER"
                         echo "Package to push: ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip"
@@ -148,10 +154,13 @@ pipeline {
                         echo "Testing connection to Octopus server..."
                         curl -s -o /dev/null -w "%{http_code}" http://4.194.43.57:8080 || echo "Failed to connect to Octopus server"
                         
-                        # Use dotnet-octo CLI with verbose logging
+                        # Export PATH to include dotnet tools
+                        export PATH="$PATH:$HOME/.dotnet/tools"
+                        
+                        # Use the full path to dotnet-octo for pushing package
                         echo "Pushing package to Octopus Deploy..."
                         set -x  # Enable command echo
-                        dotnet octo push \
+                        $HOME/.dotnet/tools/dotnet-octo push \
                             --server http://4.194.43.57:8080 \
                             --apiKey ${OCTOPUS_API_KEY} \
                             --package ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip \
@@ -159,9 +168,10 @@ pipeline {
                             --verbose
                         set +x  # Disable command echo
                         
+                        # Create release with the full path to dotnet-octo
                         echo "Creating release in Octopus Deploy..."
                         set -x  # Enable command echo
-                        dotnet octo create-release \
+                        $HOME/.dotnet/tools/dotnet-octo create-release \
                             --server http://4.194.43.57:8080 \
                             --apiKey ${OCTOPUS_API_KEY} \
                             --project hakodev \
@@ -180,15 +190,20 @@ pipeline {
             }
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
-                    sh """
-                        dotnet octo deploy-release \
+                    sh '''
+                        # Export PATH to include dotnet tools
+                        export PATH="$PATH:$HOME/.dotnet/tools"
+                        
+                        # Use full path for deployment
+                        $HOME/.dotnet/tools/dotnet-octo deploy-release \
                             --server http://4.194.43.57:8080 \
-                            --apiKey \${OCTOPUS_API_KEY} \
+                            --apiKey ${OCTOPUS_API_KEY} \
                             --project hakodev \
-                            --version \${ENVIRONMENT}.\${BUILD_NUMBER} \
+                            --version ${ENVIRONMENT}.${BUILD_NUMBER} \
                             --deployto Testing \
-                            --waitfordeployment
-                    """
+                            --waitfordeployment \
+                            --verbose
+                    '''
                 }
             }
         }
