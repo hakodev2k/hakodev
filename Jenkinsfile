@@ -11,15 +11,11 @@ pipeline {
         stage('Setup Tools') {
             steps {
                 script {
-                    // Install Octopus CLI if not already installed
+                    // Install Octopus CLI using .NET global tool
                     sh '''
-                        if ! command -v octo &> /dev/null; then
-                            echo "Installing Octopus CLI..."
-                            mkdir -p ~/.local/bin
-                            curl -L https://octopus.com/downloads/latest/OctopusTools.portable.zip -o octo.zip
-                            unzip -o octo.zip -d ~/.local/bin
-                            chmod +x ~/.local/bin/octo
-                            rm octo.zip
+                        if ! command -v dotnet-octo &> /dev/null; then
+                            echo "Installing Octopus CLI as .NET global tool..."
+                            dotnet tool install --global Octopus.DotNet.Cli --version 9.1.7
                             echo "Octopus CLI installed"
                         else
                             echo "Octopus CLI already installed"
@@ -128,9 +124,9 @@ pipeline {
         stage('Push to Octopus') {
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
-                    // Use octo CLI to push package - more reliable than curl
+                    // Use dotnet-octo CLI to push package
                     sh """
-                        octo push \
+                        dotnet octo push \
                             --server http://4.194.43.57:8080 \
                             --apiKey \${OCTOPUS_API_KEY} \
                             --package ./artifacts/hakodev.\${ENVIRONMENT}.\${BUILD_NUMBER}.zip \
@@ -139,7 +135,7 @@ pipeline {
                     
                     // Create release with proper package referencing
                     sh """
-                        octo create-release \
+                        dotnet octo create-release \
                             --server http://4.194.43.57:8080 \
                             --apiKey \${OCTOPUS_API_KEY} \
                             --project hakodev \
@@ -157,7 +153,7 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
                     sh """
-                        octo deploy-release \
+                        dotnet octo deploy-release \
                             --server http://4.194.43.57:8080 \
                             --apiKey \${OCTOPUS_API_KEY} \
                             --project hakodev \
