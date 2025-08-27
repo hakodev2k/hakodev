@@ -4,10 +4,36 @@ pipeline {
     environment {
         DOTNET_CLI_HOME = "/tmp/DOTNET_CLI_HOME"
         DOTNET_CLI_TELEMETRY_OPTOUT = "1"
-        PATH = "${PATH}:${HOME}/.dotnet/tools"
+        PATH = "${PATH}:${HOME}/.dotnet/tools:${HOME}/.local/bin"
+    }
+    
+    tools {
+        // Add dotnet tool definition if you're using the Jenkins tool installer
+        // dotnet 'dotnetcore-3.1'
     }
     
     stages {
+        stage('Setup Tools') {
+            steps {
+                script {
+                    // Install Octopus CLI if not already installed
+                    sh '''
+                        if ! command -v octo &> /dev/null; then
+                            echo "Installing Octopus CLI..."
+                            mkdir -p ~/.local/bin
+                            curl -L https://octopus.com/downloads/latest/OctopusTools.portable.zip -o octo.zip
+                            unzip -o octo.zip -d ~/.local/bin
+                            chmod +x ~/.local/bin/octo
+                            rm octo.zip
+                            echo "Octopus CLI installed"
+                        else
+                            echo "Octopus CLI already installed"
+                        fi
+                    '''
+                }
+            }
+        }
+        
         stage('Determine Target Branch') {
             steps {
                 script {
@@ -107,27 +133,24 @@ pipeline {
         stage('Push to Octopus') {
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
-                    sh '''
-                        curl -X POST "http://4.194.43.57:8080/api/packages/raw?replace=false" \
-                        -H "X-Octopus-ApiKey: ${OCTOPUS_API_KEY}" \
-                        -F "data=@artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip"
-                    '''
+                    // Use octo CLI to push package - more reliable than curl
+                    sh """
+                        octo push \
+                            --server http://4.194.43.57:8080 \
+                            --apiKey \${OCTOPUS_API_KEY} \
+                            --package ./artifacts/hakodev.\${ENVIRONMENT}.\${BUILD_NUMBER}.zip \
+                            --replace-existing
+                    """
                     
-                    sh '''
-                        curl -X POST "http://4.194.43.57:8080/api/releases" \
-                        -H "X-Octopus-ApiKey: ${OCTOPUS_API_KEY}" \
-                        -H "Content-Type: application/json" \
-                        -d '{
-                            "ProjectId": "Projects-1", 
-                            "Version": "'${ENVIRONMENT}.${BUILD_NUMBER}'",
-                            "SelectedPackages": [
-                                {
-                                    "StepName": "Deploy Website", 
-                                    "Version": "'${ENVIRONMENT}.${BUILD_NUMBER}'"
-                                }
-                            ]
-                        }'
-                    '''
+                    // Create release with proper package referencing
+                    sh """
+                        octo create-release \
+                            --server http://4.194.43.57:8080 \
+                            --apiKey \${OCTOPUS_API_KEY} \
+                            --project hakodev \
+                            --version \${ENVIRONMENT}.\${BUILD_NUMBER} \
+                            --packageversion \${ENVIRONMENT}.\${BUILD_NUMBER}
+                    """
                 }
             }
         }
@@ -138,14 +161,15 @@ pipeline {
             }
             steps {
                 withCredentials([string(credentialsId: 'octopus-api-key', variable: 'OCTOPUS_API_KEY')]) {
-                    sh '''
-                        octo push \
+                    sh """
+                        octo deploy-release \
                             --server http://4.194.43.57:8080 \
-                            --apiKey ${OCTOPUS_API_KEY} \
-                            --package ./artifacts/hakodev.${ENVIRONMENT}.${BUILD_NUMBER}.zip \
-                            --packageId hakodev \
-                            --version ${BUILD_NUMBER}
-                    '''
+                            --apiKey \${OCTOPUS_API_KEY} \
+                            --project hakodev \
+                            --version \${ENVIRONMENT}.\${BUILD_NUMBER} \
+                            --deployto Testing \
+                            --waitfordeployment
+                    """
                 }
             }
         }
