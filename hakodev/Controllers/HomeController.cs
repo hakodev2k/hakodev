@@ -21,7 +21,7 @@ namespace hakodev.Controllers
         [HttpGet("version")]
         public IActionResult Version()
         {
-            return Ok(new { Version = "1.0.3", Framework = "net9.0" });
+            return Ok(new { Version = "1.0.4", Framework = "net9.0" });
         }
     }
 }
