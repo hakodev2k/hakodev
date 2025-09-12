@@ -9,7 +9,7 @@ namespace hakodev.Controllers
         [HttpGet]
         public IActionResult Get()
         {
-            return Ok("Hello, World! This is a .NET 9.0 application running on Windows.");
+            return Ok("Hello, World! This is a .NET 8.0 application running on Windows.");
         }
 
         [HttpGet("health")]
@@ -21,7 +21,7 @@ namespace hakodev.Controllers
         [HttpGet("version")]
         public IActionResult Version()
         {
-            return Ok(new { Version = "1.0.6", Framework = "net9.0" });
+            return Ok(new { Version = "1.0.6", Framework = "net8.0" });
         }
     }
 }
